@@ -1,6 +1,8 @@
 package JSF31KochFractalFX;
 
 import JSF31KochFractalFX.calculate.*;
+import javafx.concurrent.Task;
+
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -19,9 +21,9 @@ public class KochManager {
 
     private final CyclicBarrier cyclicBarrier;
 
-    private Future<List<Edge>> rightEdges;
-    private Future<List<Edge>> leftEdges;
-    private Future<List<Edge>> bottomEdges;
+    private List<Edge> rightEdges;
+    private List<Edge> leftEdges;
+    private List<Edge> bottomEdges;
 
     private ExecutorService pool;
 
@@ -35,7 +37,7 @@ public class KochManager {
         edges = new ArrayList<>();
 
         cyclicBarrier = new CyclicBarrier(3, () -> {
-            System.out.println("Done with the 3 threads.");
+            System.out.println("Done with 3 threads");
 
             application.requestDrawEdges();
 
@@ -56,12 +58,21 @@ public class KochManager {
 
         edges.clear();
 
-        // Right
-        class Right implements Observer, Callable<List<Edge>> {
+        class CalculateRightEdges extends Task<Void> implements Observer {
+
             private List<Edge> edges;
 
             @Override
-            public List<Edge> call() throws Exception {
+            public void update(Observable o, Object arg) {
+                if (arg instanceof Edge) {
+                    Edge edge = (Edge) arg;
+
+                    edges.add(edge);
+                }
+            }
+
+            @Override
+            protected Void call() throws Exception {
                 edges = new ArrayList<>();
 
                 kochFractal.addObserver(this);
@@ -70,8 +81,15 @@ public class KochManager {
 
                 cyclicBarrier.await();
 
-                return edges;
+                rightEdges = edges;
+
+                return null;
             }
+        }
+
+        class CalculateLeftEdges extends Task<Void> implements Observer {
+
+            private List<Edge> edges;
 
             @Override
             public void update(Observable o, Object arg) {
@@ -81,14 +99,9 @@ public class KochManager {
                     edges.add(edge);
                 }
             }
-        }
-
-        // Left
-        class Left implements Observer, Callable<List<Edge>> {
-            private List<Edge> edges;
 
             @Override
-            public List<Edge> call() throws Exception {
+            protected Void call() throws Exception {
                 edges = new ArrayList<>();
 
                 kochFractal1.addObserver(this);
@@ -97,8 +110,15 @@ public class KochManager {
 
                 cyclicBarrier.await();
 
-                return edges;
+                leftEdges = edges;
+
+                return null;
             }
+        }
+
+        class CalculateBottomEdges extends Task<Void> implements Observer {
+
+            private List<Edge> edges;
 
             @Override
             public void update(Observable o, Object arg) {
@@ -108,14 +128,9 @@ public class KochManager {
                     edges.add(edge);
                 }
             }
-        }
-
-        // Bottom
-        class Bottom implements Observer, Callable<List<Edge>> {
-            private List<Edge> edges;
 
             @Override
-            public List<Edge> call() throws Exception {
+            protected Void call() throws Exception {
                 edges = new ArrayList<>();
 
                 kochFractal2.addObserver(this);
@@ -124,22 +139,19 @@ public class KochManager {
 
                 cyclicBarrier.await();
 
-                return edges;
-            }
+                bottomEdges = edges;
 
-            @Override
-            public void update(Observable o, Object arg) {
-                if (arg instanceof Edge) {
-                    Edge edge = (Edge) arg;
-
-                    edges.add(edge);
-                }
+                return null;
             }
         }
 
-        rightEdges = pool.submit(new Right());
-        leftEdges = pool.submit(new Left());
-        bottomEdges = pool.submit(new Bottom());
+        Thread right = new Thread(new CalculateRightEdges());
+        Thread left = new Thread(new CalculateLeftEdges());
+        Thread bottom = new Thread(new CalculateBottomEdges());
+
+        pool.execute(right);
+        pool.execute(left);
+        pool.execute(bottom);
 
         ts.setEnd("na deel 1 van werk");
 
@@ -155,13 +167,9 @@ public class KochManager {
 
         application.clearKochPanel();
 
-        try {
-            edges.addAll(rightEdges.get());
-            edges.addAll(leftEdges.get());
-            edges.addAll(bottomEdges.get());
-        } catch (InterruptedException | ExecutionException e) {
-            e.printStackTrace();
-        }
+        edges.addAll(rightEdges);
+        edges.addAll(leftEdges);
+        edges.addAll(bottomEdges);
 
         application.setTextNrEdges(Integer.toString(edges.size()));
 
